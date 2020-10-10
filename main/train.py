@@ -1,7 +1,9 @@
 import sys
+import os
 import timeit
 
 import numpy as np
+import pandas as pd
 
 import torch
 import torch.nn as nn
@@ -164,17 +166,28 @@ class Tester(object):
     def test_regressor(self, dataset):
         N = len(dataset)
         SAE = 0  # sum absolute error.
+        predict = []
+        correct = []
         for i in range(0, N, batch_test):
             data_batch = list(zip(*dataset[i:i+batch_test]))
             predicted_values, correct_values = self.model.forward_regressor(
                                                data_batch, train=False)
+            predict.append(predicted_values)
+            correct.append(correct_values)
             SAE += sum(np.abs(predicted_values-correct_values))
+        self.predict_values = np.concatenate(predict)
+        self.correct_values = np.concatenate(correct)
         MAE = SAE / N  # mean absolute error.
         return MAE
 
     def save_result(self, result, filename):
         with open(filename, 'a') as f:
             f.write(result + '\n')
+
+    def save_comparison(self, filename):
+        df = pd.DataFrame({'#target': self.correct_values,
+                           'predict': self.predict_values})
+        df.to_csv(filename, sep=' ', index=False)
 
 
 if __name__ == "__main__":
@@ -219,7 +232,10 @@ if __name__ == "__main__":
           sum([np.prod(p.size()) for p in model.parameters()]))
     print('-'*100)
 
-    file_result = '../output/result--' + setting + '.txt'
+    result_dir = '../output/result--' + setting
+    if not os.path.exists(result_dir):
+        os.mkdir(result_dir)
+    file_result = os.path.join(result_dir, 'train.log')
     if task == 'classification':
         result = 'Epoch\tTime(sec)\tLoss_train\tAUC_dev\tAUC_test'
     if task == 'regression':
@@ -249,6 +265,8 @@ if __name__ == "__main__":
         if task == 'regression':
             prediction_dev = tester.test_regressor(dataset_dev)
             prediction_test = tester.test_regressor(dataset_test)
+            if epoch % 50 == 0:
+                tester.save_comparison(os.path.join(result_dir, '%i.log' % epoch))
 
         time = timeit.default_timer() - start
 
